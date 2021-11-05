@@ -12,6 +12,13 @@
 #define FALSE 0
 #define TRUE 1
 
+
+#define FLAG 0x7E
+#define AE 0x03
+#define AR 0x01
+#define C 0x03
+#define BCC1 AE^C
+
 volatile int STOP=FALSE;
 
 int main(int argc, char** argv)
@@ -71,30 +78,39 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
-
-
-    /*
-    for (i = 0; i < 255; i++) {
-      buf[i] = 'a';
-    }
-    */
-    /*testing*/
-    //buf[25] = '\n';
-
-    char str[255];
-
-    gets(str);
     
-    res = write(fd,str,255);   
-    printf("%d bytes written\n", res);
- 
 
-  /* 
+    char SET[10]; 
+
+    SET[0] = FLAG;
+    SET[1] = AE;
+    SET[2] = C;
+    SET[3] = BCC1;
+    SET[4] = FLAG;
+    SET[5] = "\0";
+        
+    printf("fdewfwef");
+    res = write(fd,SET,6);   
+    
+    
+    while (STOP == FALSE) {                           /* loop for input */ 
+        res = read(fd, buf, 1); /* returns after 5 chars have been input */
+        buf[res] = 0;             /* so we can printf... */
+        if (buf[0] == 'z')
+            STOP = TRUE;
+    } 
+    
+    
+    printf("UA: %s", buf);
+
+ 
+   /* 
     O ciclo FOR e as instruções seguintes devem ser alterados de modo a respeitar 
     o indicado no guião 
   */
 
-
+    
+    sleep(1);
 
    
     if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
