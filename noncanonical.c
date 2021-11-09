@@ -22,7 +22,7 @@
 #define A_ER 0x03 // resposta do recetor
 #define A_RE 0x01 // resposta do emissor
 #define C_UA 0x03
-#define BCC(a,c) (a^c)
+#define BCC1 A_ER ^ C_UA
 
 
 
@@ -35,8 +35,8 @@ int main(int argc, char **argv)
   char buf[255];
 
   if ((argc < 2) ||
-      ((strcmp("/dev/ttyS0", argv[1]) != 0) &&
-       (strcmp("/dev/ttyS1", argv[1]) != 0)))
+      ((strcmp("/dev/ttyS10", argv[1]) != 0) &&
+       (strcmp("/dev/ttyS11", argv[1]) != 0)))
   {
     printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
     exit(1);
@@ -88,40 +88,27 @@ int main(int argc, char **argv)
 
   printf("New termios structure set\n");
 
-
-
-  char UA[10];
+  char UA[10], re[10];
 
   UA[0] = FLAG;
   UA[1] = A_ER;
   UA[2] = C_UA;
-  UA[3] = BCC(A_ER,C_UA);
+  UA[3] = BCC1;
   UA[4] = FLAG;
-
-
-
-
 
   /* 
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no gui�o 
   */
-  while (STOP == FALSE)
-  {                           /* loop for input */
-    res = read(fd, buf, 1); /* returns after 5 chars have been input */
-    buf[res] = 0;             /* so we can printf... */
-    //printf(":%s:%d\n", buf, res);
-    //printf("adswdaw");
-    if (buf[0] == 'z')
-      STOP = TRUE;
-  } 
 
-  printf("UA: %s%d", buf, 6);
-
-  res = write(fd, UA, 255);
-  //printf("%d bytes written\n", res);
+  res = read(fd, re, 5); 
+  printf("SET: %s", re);
+  
+  res = write(fd, UA, 5);
+  printf("UA: %s", UA);
 
   sleep(1);
   tcsetattr(fd, TCSANOW, &oldtio);
   close(fd);
+  
   return 0;
 }
