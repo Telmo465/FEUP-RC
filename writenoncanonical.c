@@ -5,6 +5,8 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include "alarme.h"
 
 #define BAUDRATE B9600
 #define MODEMDEVICE "/dev/ttyS1"
@@ -13,16 +15,61 @@
 #define TRUE 1
 
 
-#define FLAG 0x7E
-#define AE 0x03
-#define AR 0x01
-#define C 0x03
-#define BCC1 AE^C
+#define FLAG 0x7E ////flag de inicio e fim
+
+#define A_ER 0x03 // Campo de Endereço (A) de commandos do Emissor, resposta do Receptor
+#define A_RE 0x01 // Campo de Endereço (A) de commandos do Receptor, resposta do Emissor
+
+#define C_UA 0x07 //Campo de Controlo - UA (Unnumbered Acknowledgement)
+#define C_SET 0x03 //Campo de Controlo - SET (set up)
+#define C_RR 0x05
+#define C_REJ 0x01
+#define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
+
+#define BCC1_SET A_ER ^ C_SET
+#define BCC1_UA A_RE ^ C_UA
+
+
 
 volatile int STOP=FALSE;
 
-int main(int argc, char** argv)
-{
+enum State {
+  START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, END
+};
+
+
+void stateMachine(enum State* state, char byte) {
+
+  switch(*state){
+    case START:
+      if (byte == FLAG) *state = FLAG_RCV;
+      break;
+      
+    case FLAG_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == A_RE) *state = A_RCV;
+      else *state = START;
+      break;
+
+    case A_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == C_UA) *state = C_RCV;  // ver valor C
+      else *state = START;
+      break;
+      
+    case C_RCV:
+      if (byte == BCC1_UA) *state = BCC_OK;
+      else if (byte == FLAG) *state = FLAG_RCV;
+      else *state = START;
+      break;
+
+    case BCC_OK:
+      if (byte == FLAG) *state = END;
+      else *state = START;
+      break;
+}
+
+int main(int argc, char** argv) {
     int fd,c, res;
     struct termios oldtio,newtio;
     char buf[255];
@@ -76,20 +123,48 @@ int main(int argc, char** argv)
     }
 
     printf("New termios structure set\n");
-    
-    char SET[10], re[10]; 
 
-    SET[0] = FLAG;
-    SET[1] = AE;
-    SET[2] = C;
-    SET[3] = BCC1;
-    SET[4] = FLAG;
-  
-    res = write(fd, SET, 5);   
-    printf("SET: %s\0", SET);
+    (void) signal(SIGALRM, atende);
+
+    char SET[10];
+    char byte;
+    int cont = 3;
     
-    res = read(fd, re, 5);
-    printf("UA: %s\0", re);
+  
+    SET[0] = FLAG;
+    SET[1] = A_ER;
+    SET[2] = C_SET;
+    SET[3] = BCC1_SET;
+    SET[4] = FLAG;
+
+    state = START;
+    struct Alarme alarme;
+    alarme.flag = 1;
+    alarme.count = 0;
+  
+    do {
+      
+      write(fd, SET, 5);
+      
+      if(alarme.flag) {
+        alarm(3);
+        alarme.flag=0;
+      }
+
+      int i = 0;
+      while(*state = END || alarme.flag == 0) {
+          read(fd, &byte, 1);
+          stateMachine(state, byte);
+          i++;
+      }
+      
+      if(i == 5) {
+        break;
+      }
+      
+    }while(alarme.count < 3);
+
+
 
     /* 
     O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
@@ -105,4 +180,6 @@ int main(int argc, char** argv)
 
     close(fd);
     return 0;
+  }
 }
+

@@ -18,15 +18,60 @@
 #define FALSE 0
 #define TRUE 1
 
-#define FLAG 0x7E
-#define A_ER 0x03 // resposta do recetor
-#define A_RE 0x01 // resposta do emissor
-#define C_UA 0x03
-#define BCC1 A_ER ^ C_UA
+#define FLAG 0x7E //flag de inicio e fim
 
+#define A_ER 0x03 // Campo de Endereço (A) de commandos do Emissor, resposta do Receptor
+#define A_RE 0x01 // Campo de Endereço (A) de commandos do Receptor, resposta do Emissor
 
+#define C_UA 0x07 //Campo de Controlo - UA (Unnumbered Acknowledgement)
+#define C_SET 0x03 //Campo de Controlo - SET (set up)
+#define C_RR 0x05
+#define C_REJ 0x01
+#define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
+
+#define BCC1_SET A_ER ^ C_SET
+#define BCC1_UA A_RE ^ C_UA
 
 volatile int STOP = FALSE;
+
+enum State {
+  START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, END
+};
+
+
+void stateMachine(enum State* state, char byte) {
+  switch(*state){
+    case START:
+      if (byte == FLAG) *state = FLAG_RCV;
+      break;
+      
+    case FLAG_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == A_ER) *state = A_RCV;
+      else *state = START;
+      break;
+
+    case A_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == C_SET) *state = C_RCV;  // ver valor C
+      else *state = START;
+      break;
+      
+    case C_RCV:
+      if (byte == BCC1_SET) *state = BCC_OK;
+      else if (byte == FLAG) *state = FLAG_RCV;
+      else *state = START;
+      break;
+
+    case BCC_OK:
+      if (byte == FLAG) *state = END;
+      else *state = START;
+      break;
+
+  }
+
+
+
 
 int main(int argc, char **argv)
 {
@@ -88,23 +133,39 @@ int main(int argc, char **argv)
 
   printf("New termios structure set\n");
 
-  char UA[10], re[10];
+  char UA[10];
 
   UA[0] = FLAG;
-  UA[1] = A_ER;
+  UA[1] = A_RE;
   UA[2] = C_UA;
-  UA[3] = BCC1;
+  UA[3] = BCC1_UA;
   UA[4] = FLAG;
 
   /* 
     O ciclo WHILE deve ser alterado de modo a respeitar o indicado no gui�o 
   */
 
-  res = read(fd, re, 5); 
-  printf("SET: %s", re);
+  int i=0;
+  enum State = START;
+  char byte;
+
+  while(i < 5) {
+    read(fd, &byte, 1);
+    printf("SET: %X", byte);
+    stateMachine(state, byte);
+    i++;
+  }
+
   
-  res = write(fd, UA, 5);
-  printf("UA: %s", UA);
+
+
+
+  //res = read(fd, re, 5); 
+  //printf("SET: %s", re);
+  
+  
+  write(fd, UA, 5);
+  //printf("UA: %s", UA);
 
   sleep(1);
   tcsetattr(fd, TCSANOW, &oldtio);
