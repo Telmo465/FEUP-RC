@@ -69,8 +69,7 @@ void stateMachine(enum State* state, char byte) {
       break;
 
   }
-
-
+}
 
 
 int main(int argc, char **argv)
@@ -105,8 +104,6 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-
-
   bzero(&newtio, sizeof(newtio));
   newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
   newtio.c_iflag = IGNPAR;
@@ -133,7 +130,8 @@ int main(int argc, char **argv)
 
   printf("New termios structure set\n");
 
-  char UA[10];
+  char UA[10]; 
+  char Buf[255];
 
   UA[0] = FLAG;
   UA[1] = A_RE;
@@ -146,30 +144,28 @@ int main(int argc, char **argv)
   */
 
   int i=0;
-  enum State = START;
+  enum State state = START;
   char byte;
 
   while(i < 5) {
     read(fd, &byte, 1);
-    printf("SET: %X", byte);
-    stateMachine(state, byte);
+    printf("B: %X ", byte);
+    stateMachine(&state, byte);
+    //Buf[i] = byte;
     i++;
   }
+  printf("\n");
 
+  //Buf[i] = "\0";
   
+  //printf("SET %X: ", Buf);
 
-
-
-  //res = read(fd, re, 5); 
-  //printf("SET: %s", re);
-  
-  
   write(fd, UA, 5);
-  //printf("UA: %s", UA);
-
+  
   sleep(1);
   tcsetattr(fd, TCSANOW, &oldtio);
   close(fd);
   
   return 0;
+
 }

@@ -1,16 +1,12 @@
-CC=gcc
-CFLAGS=-Wall
-DEPS = writenoncanonical.c noncanonical.c alarme.c
-OBJ = writenoncanonical.o noncanonical.o alarm.o
+all: alarme write read
 
-%.o: %.c $(DEPS)
-	$(CC) $(CFLAGS) -c -o $@ $< 
 
-app: $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ 
+alarme: alarme.c
+	gcc alarme.c -c
 
-.PHONY: clean
+write: writecanonical.c
+	gcc -o write writecanonical.c
 
-clean: 
-	rm -f ./*.o
-	rm -f ./app
+
+read: noncanonical.c
+	gcc -o read noncanonical.c
