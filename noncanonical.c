@@ -30,7 +30,7 @@
 #define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
 
 #define BCC1_SET A_ER ^ C_SET
-#define BCC1_UA A_RE ^ C_UA
+#define BCC1_UA A_ER ^ C_UA
 
 volatile int STOP = FALSE;
 
@@ -76,11 +76,13 @@ int main(int argc, char **argv)
 {
   int fd, res;
   struct termios oldtio, newtio;
-  char buf[255];
+  unsigned char buf[255];
 
   if ((argc < 2) ||
       ((strcmp("/dev/ttyS10", argv[1]) != 0) &&
-       (strcmp("/dev/ttyS11", argv[1]) != 0)))
+       (strcmp("/dev/ttyS11", argv[1]) != 0) &&
+       (strcmp("/dev/ttyS1", argv[1]) != 0) &&
+       (strcmp("/dev/ttyS0", argv[1]) != 0) ))
   {
     printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
     exit(1);
@@ -113,7 +115,7 @@ int main(int argc, char **argv)
   newtio.c_lflag = 0;
 
   newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
-  newtio.c_cc[VMIN] = 5;  /* blocking read until 5 chars received */
+  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -130,11 +132,11 @@ int main(int argc, char **argv)
 
   printf("New termios structure set\n");
 
-  char UA[10]; 
-  char Buf[255];
+  unsigned char UA[10]; 
+  unsigned char Buf[255];
 
   UA[0] = FLAG;
-  UA[1] = A_RE;
+  UA[1] = A_ER;
   UA[2] = C_UA;
   UA[3] = BCC1_UA;
   UA[4] = FLAG;
@@ -145,11 +147,11 @@ int main(int argc, char **argv)
 
   int i=0;
   enum State state = START;
-  char byte;
+  unsigned char byte;
 
-  while(i < 5) {
+  while(state != END) {
     read(fd, &byte, 1);
-    printf("B: %X ", byte);
+    //printf("B: %X ", byte);
     stateMachine(&state, byte);
     //Buf[i] = byte;
     i++;
