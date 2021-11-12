@@ -6,6 +6,10 @@
 #include <termios.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+
 #include "alarme.h"
 
 #define BAUDRATE B9600
@@ -27,13 +31,31 @@
 #define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
 
 #define BCC1_SET A_ER ^ C_SET
-#define BCC1_UA A_RE ^ C_UA
+#define BCC1_UA A_ER ^ C_UA
 
 volatile int STOP=FALSE;
+
+int count = 0, flag = 1;
 
 enum State {
   START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, END
 };
+
+void alarme_handler(int signal) {
+
+   flag = 1;
+   count++;
+}
+
+void initAlarme() {
+
+   (void) signal(SIGALRM, alarme_handler);
+
+   count = 0;
+   flag = 1;
+
+}
+
 
 void stateMachine(enum State* state, char byte) {
 
@@ -44,7 +66,7 @@ void stateMachine(enum State* state, char byte) {
       
     case FLAG_RCV:
       if (byte == FLAG) *state = FLAG_RCV;
-      else if (byte == A_RE) *state = A_RCV;
+      else if (byte == A_ER) *state = A_RCV;
       else *state = START;
       break;
 
@@ -64,6 +86,7 @@ void stateMachine(enum State* state, char byte) {
       if (byte == FLAG) *state = END;
       else *state = START;
       break;
+
   }
 }
 
@@ -75,7 +98,9 @@ int main (int argc, char** argv)  {
   int i, sum = 0, speed = 0;
     
   if ( (argc < 2) || 
-  	    ((strcmp("/dev/ttyS10", argv[1])!=0) && 
+  	    ((strcmp("/dev/ttyS0", argv[1])!=0) && 
+        (strcmp("/dev/ttyS1", argv[1])!=0) && 
+        (strcmp("/dev/ttyS10", argv[1])!=0) && 
   	    (strcmp("/dev/ttyS11", argv[1])!=0) )) {
     printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
     exit(1);
@@ -105,7 +130,7 @@ int main (int argc, char** argv)  {
   newtio.c_lflag = 0;
 
   newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 5;   /* blocking read until 5 chars received */
+  newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 chars received */
 
 
 
@@ -127,8 +152,7 @@ int main (int argc, char** argv)  {
   char SET[10];
   char Buf[255];
   char byte;
-  int cont = 3;
-    
+ 
   SET[0] = FLAG;
   SET[1] = A_ER;
   SET[2] = C_SET;
@@ -147,22 +171,23 @@ int main (int argc, char** argv)  {
 
     //printf("flag: %d", alarme.flag);
 
-    if(alarme.flag) {
-      alarm(1);
-      alarme.flag = 0;
+    if(flag) {
+      alarm(3);
+      flag = 0;
     }
 
-    printf("flag: %d", alarme.count);
-
+    //printf("flag: %d", flag);
+    
     
     int i = 0;
-    while(state == END || alarme.flag == 0) {
+    while(state != END && flag == 0) {
       read(fd, &byte, 1);
-      printf("B: %X", byte);
+      //printf("B: %X", byte);
       stateMachine(&state, byte);
       //Buf[i] = byte;
       i++;
     }
+    
 
     //Buf[i] = "\0";
     printf("\n");
@@ -171,11 +196,9 @@ int main (int argc, char** argv)  {
       break;
     }
 
-    alarme.count++;
       
-  }while(alarme.count < 3);
-
-  printf("UA: %X", Buf);
+  }while(count < 3);
+  
 
   /* 
   O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
