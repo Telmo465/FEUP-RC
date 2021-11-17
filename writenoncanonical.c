@@ -10,54 +10,14 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "alarme.h"
-
-#define BAUDRATE B9600
-#define MODEMDEVICE "/dev/ttyS1"
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
-#define FALSE 0
-#define TRUE 1
-
-
-#define FLAG 0x7E ////flag de inicio e fim
-
-#define A_ER 0x03 // Campo de Endereço (A) de commandos do Emissor, resposta do Receptor
-#define A_RE 0x01 // Campo de Endereço (A) de commandos do Receptor, resposta do Emissor
-
-#define C_UA 0x07 //Campo de Controlo - UA (Unnumbered Acknowledgement)
-#define C_SET 0x03 //Campo de Controlo - SET (set up)
-#define C_RR 0x05
-#define C_REJ 0x01
-#define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
-
-#define BCC1_SET A_ER ^ C_SET
-#define BCC1_UA A_ER ^ C_UA
+#include "auxiliar.h"
+#include "constantes.h"
 
 volatile int STOP=FALSE;
 
 int count = 0, flag = 1;
 
-enum State {
-  START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, END
-};
-
-void alarme_handler(int signal) {
-
-   flag = 1;
-   count++;
-}
-
-void initAlarme() {
-
-   (void) signal(SIGALRM, alarme_handler);
-
-   count = 0;
-   flag = 1;
-
-}
-
-
-void stateMachine(enum State* state, char byte) {
+void stateMachineSET(enum State* state, char byte) {
 
   switch(*state){
     case START:
@@ -106,7 +66,6 @@ int main (int argc, char** argv)  {
     exit(1);
   }
 
-
   /*
     Open serial port device for reading and writing and not as controlling tty
     because we don't want to get killed if linenoise sends CTRL-C.
@@ -131,8 +90,6 @@ int main (int argc, char** argv)  {
 
   newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
   newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 chars received */
-
-
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -169,26 +126,20 @@ int main (int argc, char** argv)  {
       
     write(fd, SET, 5);
 
-    //printf("flag: %d", alarme.flag);
-
     if(flag) {
       alarm(3);
       flag = 0;
     }
-
-    //printf("flag: %d", flag);
-    
     
     int i = 0;
     while(state != END && flag == 0) {
       read(fd, &byte, 1);
       //printf("B: %X", byte);
-      stateMachine(&state, byte);
+      stateMachineSET(&state, byte);
       //Buf[i] = byte;
       i++;
     }
     
-
     //Buf[i] = "\0";
     printf("\n");
 
@@ -196,10 +147,10 @@ int main (int argc, char** argv)  {
       break;
     }
 
-      
+    count++;
+
   }while(count < 3);
   
-
   /* 
   O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
   o indicado no gui�o 
@@ -216,5 +167,3 @@ int main (int argc, char** argv)  {
   return 0;
 
 }
-
-

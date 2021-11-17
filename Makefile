@@ -1,12 +1,16 @@
-all: alarme write read
+CC = gcc
 
+all: auxiliar write read
 
-alarme: alarme.c
-	gcc alarme.c -c
+auxiliar: auxiliar.c
+	$(CC) auxiliar.c -c
 
-write: writecanonical.c
-	gcc -o write writecanonical.c
-
+write: writenoncanonical.c
+	$(CC) -w -o write writenoncanonical.c auxiliar.c
 
 read: noncanonical.c
-	gcc -o read noncanonical.c
+	$(CC) -w -o read noncanonical.c
+
+clean:
+	rm -f *.o *.d read write
+

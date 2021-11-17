@@ -13,33 +13,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define BAUDRATE B9600
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
-#define FALSE 0
-#define TRUE 1
-
-#define FLAG 0x7E //flag de inicio e fim
-
-#define A_ER 0x03 // Campo de Endereço (A) de commandos do Emissor, resposta do Receptor
-#define A_RE 0x01 // Campo de Endereço (A) de commandos do Receptor, resposta do Emissor
-
-#define C_UA 0x07 //Campo de Controlo - UA (Unnumbered Acknowledgement)
-#define C_SET 0x03 //Campo de Controlo - SET (set up)
-#define C_RR 0x05
-#define C_REJ 0x01
-#define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
-
-#define BCC1_SET A_ER ^ C_SET
-#define BCC1_UA A_ER ^ C_UA
+#include "auxiliar.h"
+#include "constantes.h"
 
 volatile int STOP = FALSE;
 
-enum State {
-  START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, END
-};
-
-
-void stateMachine(enum State* state, char byte) {
+void stateMachineUA(enum State* state, char byte) {
   switch(*state){
     case START:
       if (byte == FLAG) *state = FLAG_RCV;
@@ -71,9 +50,8 @@ void stateMachine(enum State* state, char byte) {
   }
 }
 
+int main(int argc, char **argv) {
 
-int main(int argc, char **argv)
-{
   int fd, res;
   struct termios oldtio, newtio;
   unsigned char buf[255];
@@ -151,16 +129,12 @@ int main(int argc, char **argv)
 
   while(state != END) {
     read(fd, &byte, 1);
-    //printf("B: %X ", byte);
-    stateMachine(&state, byte);
+    stateMachineUA(&state, byte);
     //Buf[i] = byte;
     i++;
   }
-  printf("\n");
 
   //Buf[i] = "\0";
-  
-  //printf("SET %X: ", Buf);
 
   write(fd, UA, 5);
   
