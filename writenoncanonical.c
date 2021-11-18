@@ -1,21 +1,43 @@
 /*Non-Canonical Input Processing*/
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <signal.h>
-
-#include "auxiliar.h"
-#include "constantes.h"
+#include "writenoncanonical.h"
 
 volatile int STOP=FALSE;
 
 int count = 0, flag = 1;
+struct termios oldtio,newtio;
+
+void stateMachineUA(enum State* state, char byte) {
+  switch(*state){
+    case START:
+      if (byte == FLAG) *state = FLAG_RCV;
+      break;
+      
+    case FLAG_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == A_ER) *state = A_RCV;
+      else *state = START;
+      break;
+
+    case A_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == C_SET) *state = C_RCV;  
+      else *state = START;
+      break;
+      
+    case C_RCV:
+      if (byte == BCC1_SET) *state = BCC_OK;
+      else if (byte == FLAG) *state = FLAG_RCV;
+      else *state = START;
+      break;
+
+    case BCC_OK:
+      if (byte == FLAG) *state = END;
+      else *state = START;
+      break;
+
+  }
+}
 
 void stateMachineSET(enum State* state, char byte) {
 
@@ -50,30 +72,105 @@ void stateMachineSET(enum State* state, char byte) {
   }
 }
 
-int main (int argc, char** argv)  {
-    
-  int fd,c, res;
-  struct termios oldtio,newtio;
-  char buf[255];
-  int i, sum = 0, speed = 0;
-    
-  if ( (argc < 2) || 
-  	    ((strcmp("/dev/ttyS0", argv[1])!=0) && 
-        (strcmp("/dev/ttyS1", argv[1])!=0) && 
-        (strcmp("/dev/ttyS10", argv[1])!=0) && 
-  	    (strcmp("/dev/ttyS11", argv[1])!=0) )) {
-    printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
-    exit(1);
+int llopen(int* fd, char* serial_port, int flag_name) {
+
+  fd = initStruct(fd, serial_port);
+
+  printf("%d\n", flag_name);
+
+  switch(flag_name) {
+    case TRANSMITTER:
+      if(sendSETPacket(fd)) {
+        printf("T");
+        return 1;
+      }
+      break;
+    case RECEIVER:
+      reciveSETPacket(fd);
+      sendUAPacket(fd);
+      printf("R");
+      break;
+    default:
+      return 1;
   }
+  
+  return 0;
+}
+
+void reciveSETPacket(int fd) {
+
+  enum State state = START;
+  unsigned char byte;
+  int i=0;
+
+  while(state != END) {
+    read(fd, &byte, 1);
+    stateMachineUA(&state, byte);
+    i++;
+  }
+}
+
+void sendUAPacket(int fd) {
+
+  unsigned char UA[10]; 
+
+  UA[0] = FLAG;
+  UA[1] = A_ER;
+  UA[2] = 0x09;
+  UA[3] = BCC1_UA;
+  UA[4] = FLAG;
+
+  write(fd, UA, 5);
+}
+
+int sendSETPacket(int fd) {
+
+  char SET[10], byte;
+  enum State state = START;
+ 
+  SET[0] = FLAG;
+  SET[1] = A_ER;
+  SET[2] = C_SET;
+  SET[3] = BCC1_SET;
+  SET[4] = FLAG;
+
+  initAlarme();
+
+  do {
+      
+    write(fd, SET, 5);
+
+    if(flag) {
+      alarm(3);
+      flag = 0;
+    }
+    
+    while(state != END && flag == 0) {
+      read(fd, &byte, 1);
+      stateMachineSET(&state, byte);
+    }
+    
+    if(state == END) {
+      return 0;
+    }
+
+    count++;
+
+  } while(count < 3);
+
+  return 1;
+}
+
+
+int initStruct(int* fd, char* serial_port) {
 
   /*
     Open serial port device for reading and writing and not as controlling tty
     because we don't want to get killed if linenoise sends CTRL-C.
   */
 
-
-  fd = open(argv[1], O_RDWR | O_NOCTTY );
-  if (fd <0) {perror(argv[1]); exit(-1); }
+  fd = open(serial_port, O_RDWR | O_NOCTTY );
+  if (fd <0) {perror(serial_port); exit(-1); }
 
   if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
     perror("tcgetattr");
@@ -105,65 +202,18 @@ int main (int argc, char** argv)  {
 
   printf("New termios structure set\n");
 
+  return fd;
+}
 
-  char SET[10];
-  char Buf[255];
-  char byte;
- 
-  SET[0] = FLAG;
-  SET[1] = A_ER;
-  SET[2] = C_SET;
-  SET[3] = BCC1_SET;
-  SET[4] = FLAG;
+int llclose(int fd) {
 
-  enum State state = START;
-  
-  initAlarme();
-
-  //sleep(1);
-
-  do {
-      
-    write(fd, SET, 5);
-
-    if(flag) {
-      alarm(3);
-      flag = 0;
-    }
-    
-    int i = 0;
-    while(state != END && flag == 0) {
-      read(fd, &byte, 1);
-      //printf("B: %X", byte);
-      stateMachineSET(&state, byte);
-      //Buf[i] = byte;
-      i++;
-    }
-    
-    //Buf[i] = "\0";
-    printf("\n");
-
-    if(state == END) {
-      break;
-    }
-
-    count++;
-
-  }while(count < 3);
-  
-  /* 
-  O ciclo FOR e as instru��es seguintes devem ser alterados de modo a respeitar 
-  o indicado no gui�o 
-  */
-
-  sleep(1);
+   sleep(1);
    
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");
-    exit(-1);
+    return 1;
   }
 
   close(fd);
   return 0;
-
 }

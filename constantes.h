@@ -19,3 +19,7 @@
 #define BCC1_SET A_ER ^ C_SET
 #define BCC1_UA A_ER ^ C_UA
 
+#define TRANSMITTER 0
+#define RECEIVER 1
+
+

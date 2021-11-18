@@ -1,7 +1,6 @@
 #ifndef ALARME_H
 #define ALARME_H
 
-
 #include <signal.h>
 
 extern int count, flag;
