@@ -116,7 +116,7 @@ void sendUAPacket(int fd) {
 
   UA[0] = FLAG;
   UA[1] = A_ER;
-  UA[2] = 0x09;
+  UA[2] = C_UA;
   UA[3] = BCC1_UA;
   UA[4] = FLAG;
 
@@ -204,6 +204,50 @@ int initStruct(int* fd, char* serial_port) {
 
   return fd;
 }
+
+int llread(int fd, char* buf) {
+    
+    
+    
+    
+
+}
+
+
+void buildRRFrame(char* RR, int numFrameRecieved) {
+
+    
+    RR[0] = FLAG;
+    RR[1] = A_RE;
+    
+    if(numTramaRecebida == 0) {
+        RR[2] = C_RR_0;
+        RR[3] = BCC1_RR_0;
+    }else {
+        RR[2] = C_RR_1;
+        RR[3] = BCC1_RR_1
+    }
+    
+    RR[4] = FLAG;
+}
+
+
+void buildREJFrame(char* REJ, int numT) {
+    
+    REJ[0] = FLAG;
+    REJ[1] = A_RE;
+    
+    if(numTramaRecebida == 0) {
+        REJ[2] = C_REJ_0;
+        REJ[3] = BCC1_REJ_0;
+    }else {
+        REJ[2] = C_REJ_1;
+        REJ[3] = BCC1_REJ_1;
+    }
+    
+    REJ[4] = FLAG;
+}
+
 
 int llclose(int fd) {
 

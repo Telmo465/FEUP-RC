@@ -12,12 +12,18 @@
 
 #define C_UA 0x07 //Campo de Controlo - UA (Unnumbered Acknowledgement)
 #define C_SET 0x03 //Campo de Controlo - SET (set up)
-#define C_RR 0x05
-#define C_REJ 0x01
+#define C_RR_0 0x05
+#define C_RR_1 0x85
+#define C_REJ_0 0x01
+#define C_REJ_1 0x81
 #define C_DISC 0x0B //Campo de Controlo - DISC (disconnect)
 
 #define BCC1_SET A_ER ^ C_SET
 #define BCC1_UA A_ER ^ C_UA
+#define BCC1_RR_0 A_RE ^ C_RR_0
+#define BCC1_RR_1 A_RE ^ C_RR_1
+#define BCC1_REJ_0 A_RE ^ C_REJ_0
+#define BCC1_REJ_1 A_RE ^ C_REJ_1
 
 #define TRANSMITTER 0
 #define RECEIVER 1
