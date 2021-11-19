@@ -116,7 +116,7 @@ void sendUAPacket(int fd) {
 
   UA[0] = FLAG;
   UA[1] = A_ER;
-  UA[2] = 0x09;
+  UA[2] = C_UA;
   UA[3] = BCC1_UA;
   UA[4] = FLAG;
 
