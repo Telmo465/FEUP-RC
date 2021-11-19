@@ -5,6 +5,7 @@
 volatile int STOP=FALSE;
 
 int count = 0, flag = 1;
+int numFrame = 0
 struct termios oldtio,newtio;
 
 void stateMachineUA(enum State* state, char byte) {
@@ -205,53 +206,54 @@ int initStruct(int* fd, char* serial_port) {
   return fd;
 }
 
-int llread(int fd, char* buf) {
+int lrwrite(int fd, char* buf, int lenght) {
+    
+    char I[255];
+    int i=0;    
+   
+    I[0] = FLAG;
+    I[1] = A_ER;
+
+    if(numTrama == 0) {
+        I[2] = C_I0;
+        numTrama = 1;
+    }else {
+        I[2] = C_I1;
+        numTrama = 0;   
+    }
+    
+    I[3] = BCC1_SET;
+
+    for(i=4; i<lenght-1; i++) {
+        I[i] = buf[i-4];
+    }
     
     
+    I[i] =
+
+
+
+    I[i+1] = FLAG;
+}
+
+char BCC2(char* buf, int lenght) {
     
-    
+    for(int i=0; i<lenght-1; i++) {
+        
+    }
 
 }
 
 
-void buildRRFrame(char* RR, int numFrameRecieved) {
-
-    
-    RR[0] = FLAG;
-    RR[1] = A_RE;
-    
-    if(numTramaRecebida == 0) {
-        RR[2] = C_RR_0;
-        RR[3] = BCC1_RR_0;
-    }else {
-        RR[2] = C_RR_1;
-        RR[3] = BCC1_RR_1
-    }
-    
-    RR[4] = FLAG;
-}
-
-
-void buildREJFrame(char* REJ, int numT) {
-    
-    REJ[0] = FLAG;
-    REJ[1] = A_RE;
-    
-    if(numTramaRecebida == 0) {
-        REJ[2] = C_REJ_0;
-        REJ[3] = BCC1_REJ_0;
-    }else {
-        REJ[2] = C_REJ_1;
-        REJ[3] = BCC1_REJ_1;
-    }
-    
-    REJ[4] = FLAG;
+char xor(char x1, char x2) {
+  
+    return xor(x1 ^ x2, x2); 
 }
 
 
 int llclose(int fd) {
 
-   sleep(1);
+  sleep(1);
    
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");
