@@ -12,7 +12,8 @@
 
 int main (int argc, char** argv)  {
 
-    int fd;
+    int fd = -1;
+    int flag_name = atoi(argv[2]);
 
     if ( (argc < 2) || 
   	    ((strcmp("/dev/ttyS0", argv[1])!=0) && 
@@ -23,9 +24,19 @@ int main (int argc, char** argv)  {
             exit(1);
     }
 
- 
+    if(llopen(&fd, argv[1], flag_name)) {
+        return 1;
+    }
 
-    if(llopen(fd, argv[1], atoi(argv[2]))) {
+    /*Packet so para testar*/
+    char cbd[10];
+
+    cbd[0] = 0x01;
+    cbd[1] = 0x02;
+    cbd[2] = 0x03;
+    cbd[3] = 0x04;
+
+    if(llrwrite(fd, cbd, 4, flag_name)) {
         return 1;
     }
 
