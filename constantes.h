@@ -28,6 +28,7 @@
 #define BCC1_RR_1 A_RE ^ C_RR_1
 #define BCC1_REJ_0 A_RE ^ C_REJ_0
 #define BCC1_REJ_1 A_RE ^ C_REJ_1
+#define BCC_DISC A_ER ^ C_SET
 
 #define TRANSMITTER 0
 #define RECEIVER 1

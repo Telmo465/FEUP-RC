@@ -4,9 +4,32 @@
 
 volatile int STOP=FALSE;
 
-int count = 0, flag = 1;
+int count = 0, flag = 1, IWellRecieved = 0;
 int numTramaEscrita = 0;
 struct termios oldtio,newtio;
+
+int getNumberOfIframe(char* I) {
+
+  char byte;
+  int i = 0;
+  int num;
+
+  while(byte != FLAG) {
+    byte = I[i];
+    if(byte == C_I0) {
+      num = 0
+    } else if(byte == C_I1) {
+      num = 1
+    }else {
+      num = -1;
+    }
+    i++;
+  }
+
+  return num;
+}
+
+
 
 void stateMachineUA(enum State* state, char byte) {
   
@@ -73,6 +96,105 @@ void stateMachineSET(enum State* state, char byte) {
 
   }
 }
+
+//Tanto para o RR como para o REJ
+void responseStateMachine(enum State* state, char byte) {
+
+  switch(*state){
+    case START:
+      if(byte == FLAG) {
+        state = FLAG_RCV;
+      }
+    case FLAG_RCV:
+      if(byte == A_RE) {
+        state = A_RCV;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+    case A_RCV:
+      if(byte == C_RR_0 || byte == C_RR_1) {
+          state = C_RCV_RR;
+      }else if(byte == C_REJ_0 || byte == C_REJ_1) {
+        state = C_RCV_REJ;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+    case C_RCV_RR:
+      if(byte == BCC1_RR_0 || byte == BCC1_RR_1) {
+        state = BCC_OK;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+      break;
+    case C_RCV_REJ:
+      if(byte == BCC1_REJ_0 || byte == BCC1_REJ_1) {
+        state = BCC_OK;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+      break;
+    case BCC_OK:
+      if(byte == FLAG) {
+        state = END;
+      }else {
+        state = START;
+      }
+  }
+}
+
+void informatioStateMachine(enum State* state, char byte) {
+
+  char data_byte = 0x00;
+  int i = 0;
+
+  switch(*state) {
+    case START:
+      if(byte == FLAG) {
+        state = FLAG_RCV;
+      }
+    case FLAG_RCV:
+      if(byte == A_ER) {
+        state = A_RCV;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+    case A_RCV:
+      if(byte == C_I0 || byte == C_I1) {
+          state = C_RCV;
+      }else if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = START;
+      }
+    case C_RCV:
+      if(byte == FLAG) {
+        state = FLAG_RCV;
+      }else {
+        state = DATA_RCV;
+      }
+    case DATA_RCV:
+      if(byte == data_byte) {
+        state = FLAG_RCV2;
+      }else {
+        Data[i] = byte;
+        data_byte ^= byte;
+        i++;
+      }
+    case FLAG_RCV2:
+      state = END;
+  }
+}
+
 
 int initStruct(char* serial_port) {
 
@@ -187,11 +309,11 @@ void buildREJFrame(char* REJ, int numFrameRecieved) {
     REJ[1] = A_RE;
     
     if(numFrameRecieved == 0) {
-        REJ[2] = C_REJ_1;
-        REJ[3] = BCC1_REJ_1;
-    }else {
         REJ[2] = C_REJ_0;
         REJ[3] = BCC1_REJ_0;
+    }else {
+        REJ[2] = C_REJ_1;
+        REJ[3] = BCC1_REJ_1;
     }
     
     REJ[4] = FLAG;
@@ -213,7 +335,7 @@ void buildRRFrame(char* RR, int numFrameRecieved) {
     RR[4] = FLAG;
 }
 
-void buildIFrame(char* I, char* buf, int length) {
+int buildIFrame(char* I, char* buf, int length) {
 
   char packet[255];
   int i;
@@ -240,6 +362,9 @@ void buildIFrame(char* I, char* buf, int length) {
   
   I[i] = BCC2(packet, j+1);
   I[i+1] = FLAG;
+
+  return i+1;
+
 }
 
 char BCC2(char* buf, int length) {
@@ -274,40 +399,127 @@ int llopen(int* fd, char* serial_port, int flag_name) {
   return 0;
 }
 
-int llrwrite(int fd, char* buf, int length, int flag_name) {
+int llrwrite(int fd, char* buf, int length) {
     
-    int res;
-    char I[255];
-    char RR[255], REJ[255];
+  int res;
+  char I[255], byte;
+  enum State state = START;
+  
+  int ISize = buildIFrame(I, buf, length);
 
-    switch (flag_name) {
-      case TRANSMITTER:
-        //TODO: Fazer timeout
-        buildIFrame(I, buf, length);
-        res = write(fd,I,length);
-        return 0;
-        break;
-      case RECEIVER:
-        //TODO: Se packet recebido bem write RR, se nao foi bem recebido write REJ
-        return res;
-      default:
-        break;
-    }
-
+  write(fd, I, ISize+length);
+    
+  while(state != END) {
+    read(fd, byte, 1);
+    responseStateMachine(state, byte);
+  }
+      
 }
 
 int llread(int fd, char* buf) {
   
-  char packet[255];
+  int res, i = 0, packetSize = 0;//Using control packet to know this value
+  char byte;
+  char RR[255], REJ[255];
+  enum State state = START;
 
-  //TODO:Fazer while para ler packet I recebido com state machine
 
-  return 0;
+  while(state != END) {
+    read(fd, byte, 1);
+    informatioStateMachine(state, byte);
+    I[i] = byte;
+    i++;
+  }
+
+  char I[i];
+  
+  int numFrameI = getNumberOfIframe(I);
+  
+
+  buildRRFrame(RR, numFrameI);
+  write(fd, RR, 5);
+
+  return packetSize;
+  //write(fd, REJ, 5);
+  
 }
 
-int llclose(int fd) {
+int llclose(int fd, int flag_name) {
+  unsigned char buf[255];
+  
+  switch(flag_name){
+    case TRANSMITTER:
+      
+      buf[0] = FLAG;
+      buf[1] = A_ER;
+      buf[2] = C_DISC;
+      buf[3] = BCC_DISC;
+      buf[4] = FLAG;
+      
+      do{
+        //send DISC frame
+        write(fd,buf,5)
+        //start alarm
+        //read DISC frame
+        int error = readDISC(fd);
+        
+        if(!error){
+          //parar alarme
+          //flag alarme 0
+          break;
+        }
+      } while(count <= 3 && flag);
+        //stop alarm
+      if (count > 3){
+        printf("max tries achieved\n");
+        return -1;
+      }
+      //escrever o UA
+      buf[0] = FLAG;
+      buf[1] = A_ER;
+      buf[2] = C_UA;
+      buf[3] = BCC1_UA;
+      buf[4] = FLAG;
+        
+      write(fd, buf,5);
+      sleep(1);
 
-  sleep(1);
+      break;
+
+    case RECEIVER:
+        do{
+          //comecar alarme
+          //set flag alarme
+          int error = readDISC(fd);
+            if (!error){
+              //start alarme
+              //mudar a flag alarme  
+              break;
+            }
+        }while (count <= 3 && flag);
+
+        //stop alarme
+        if (count > 3){
+        printf("max tries achieved\n");
+        return -1;
+        }
+
+        buf[0] = FLAG;
+        buf[1] = A_ER;
+        buf[2] = C_DISC;
+        buf[3] = BCC_DISC;
+        buf[4] = FLAG;  
+        write(fd, buf, 5);
+        if (readUA(fd)){
+          return 1;
+        }
+        break;
+
+    default:
+      return -1;
+  
+
+  //sleep(1);
    
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");
@@ -315,7 +527,7 @@ int llclose(int fd) {
   }
 
   close(fd);
-  return 0;
+  return fd;
 }
 
 
