@@ -102,10 +102,25 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
 
     switch (flag_name) {
         case TRANSMITTER:
+            
+            char packet[2000];
+            int numPackets = 5, j = 0;
+ 
+            while(j < numPackets) {
+                for(int i=0; i<1024; i++) {
+                    packet[i] = 0xFF;
+                }
+                if(llrwrite(fd, packet, 4 + fd_packetSize)) {
+                    return 1;
+                }
+                j++;
+            }
+            /*
             readFileData(file_name);
             if(sendDataPacket(fd)) {
                 return 1;
             }
+            */
             break;
         case RECEIVER:
             char buf[255];

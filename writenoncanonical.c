@@ -30,7 +30,7 @@ int getNumberOfIframe(char* I) {
 
   return num;
 }
-/*
+
 void checkIFrame(char* I) {
 
   int i=0; 
@@ -62,22 +62,14 @@ void checkIFrame(char* I) {
     }else {
       correct = false;
     }
-    if(i == 4 && ) {
+    if(i == 4 && ()) {
 
     }else {
 
     }
-
   }
-  
-
-
-
-
-
-
 }
-*/
+  
 
 void stateMachineUA(enum State* state, char byte) {
   
@@ -234,7 +226,6 @@ void informatioStateMachine(enum State* state, char byte) {
       if(byte == data_byte) {
         state = FLAG_RCV2;
       }else {
-        Data[i] = byte;
         data_byte ^= byte;
         i++;
       }
@@ -450,41 +441,71 @@ int llopen(int* fd, char* serial_port, int flag_name) {
 int llrwrite(int fd, char* buf, int length) {
     
   int res;
-  char I[255], byte;
+  char I[2058], byte;
   enum State state = START;
   
   int ISize = buildIFrame(I, buf, length);
-
-  write(fd, I, ISize);
+  
+  
+  do {
+    printf("##Escreve Informacao##\n");
+    write(fd, I, ISize); //Envia o pacote de informacao
+  
+    if(flag) {
+        alarm(3);
+        flag = 0;
+    }
     
-  while(state != END) {
-    read(fd, byte, 1);
-    responseStateMachine(state, byte);
-  }
-      
+    printf("##Recebe RR ou REJ##");
+    
+    char response[255];
+    int i = 0;   
+    while(state != END && flag == 0) { //Recebe RR ou REJ
+        read(fd, byte, 1);
+        responseStateMachine(state, byte);
+        printf("B: %X", byte);//limpar se transmisao para a meio
+        respose[i] = byte;
+    }
+    
+    if(response[2] == C_RR_0 || response[2] == C_RR_1) {
+        break;
+    }
+    
+  }while(state != END);
+  printf("\n");
+     
 }
 
 int llread(int fd, char* buf) {
   
-  int res, i = 0;//Using control packet to know this value
+  int res, i = 0;
   char byte;
   char RR[255], REJ[255];
   enum State state = START;
 
-
-  while(state != END) {
+  printf("Recebe Informacao: \n");
+  while(state != END) { //Recebe o pacote de Informacao
     read(fd, byte, 1);
-    informatioStateMachine(state, byte);
-    I[i] = byte;
+    informatioStateMachine(state, byte); //Corrigir state machine
+    I[i] = byte; //Se parar a meio limpar buffer
+    printf("B:%X", byte);
     i++;
   }
-
+  printf("\n");    
+  
   char I[i];
-  int numFrameI = getNumberOfIframe(I);
   
-
-
+  //Fazer verificacao do trama I
+    
+  int numFrameI = getNumberOfIframe(I);//numero da frame I recebida
+  printf("Num Frame I: %d", numFrameI);  
   
+  //Se Trama I bem => RR; Se trama I mal => REJ
+  printf("Escreve RR Frame");
+  buildRRFrame(RR, numFrameI);
+  write(fd, RR, 5); //Envia o pacote RR
+  
+  /*
   if() {
     buildRRFrame(RR, numFrameI);
     write(fd, RR, 5);
@@ -492,6 +513,7 @@ int llread(int fd, char* buf) {
     buildREJFrame(fd, REJ);
     write(fd, REJ, 5);
   }
+  */
   
   return i+1;
 }
