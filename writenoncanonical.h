@@ -18,22 +18,22 @@
 extern int fd_filesize, fd_file, fd_packetSize, packetsUnsent;
 
 int readUA(int fd);
-int dataPacketAfterReception(char* I, int length, char* dataPacket);
-int verifyPacket(char* dataPacket, int length, char bcc2);
-void stateMachineInfo(enum State* state, char byte, char* controlByte);
+unsigned int dataPacketAfterReception(unsigned char* I, int length, unsigned char* dataPacket);
+int verifyPacket(unsigned char* dataPacket, int length, unsigned char bcc2);
+void stateMachineInfo(enum State* state, unsigned char byte, unsigned char* controlByte);
 void responseStateMachine(enum State* state, unsigned char byte, unsigned char* controlByte);
-void stateMachineSETAndUA(enum State* state, char byte);
-int initStruct(char* serial_port);
+void stateMachineSETAndUA(enum State* state, unsigned char byte);
+int initStruct(unsigned char* serial_port);
 void sendUAPacket(int fd);
 void reciveSETPacket(int fd);
 int sendSETPacket(int fd);
 void buildREJFrame(unsigned char* REJ, int numFrameRecieved);
 void buildRRFrame(unsigned char* RR, int numFrameRecieved);
-int buildIFrame(char* I, char* buf, int length);
-char BCC2(char* buf, int length);
-int llopen(int* fd, char* serial_port, int flag_name);
-int llrwrite(int fd, char* buf, int length);
-int llread(int fd, char* buf);
+int buildIFrame(unsigned char* I, unsigned char* buf, int length);
+unsigned char BCC2(unsigned char* buf, int length);
+int llopen(int* fd, unsigned char* serial_port, int flag_name);
+int llrwrite(int fd, unsigned char* buf, int length);
+int llread(int fd, unsigned char* buf);
 int llclose(int fd, int flag_name);
 
 

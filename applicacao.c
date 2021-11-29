@@ -98,8 +98,6 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
         return 1;
     }
 
-    printf("LLOPEN\n");
-
     //strcpy(file_name, argv[2]);
     
     //Writer
@@ -113,7 +111,6 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
     
     switch (flag_name) {
         case TRANSMITTER:
-            
             while(j < numPackets) {
                 for(int i=0; i<4; i++) {
                     packet[i] = 0xFF;
@@ -131,12 +128,11 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
            
             break;
         case RECEIVER:
+            printf("\n...Receber Packet...\n");
             while(packetSize < file_size) {
                 aux = llread(fd, buf);
-                printf("aux: %d", aux);
                 packetSize += aux;
             }
-            printf("aux: %d", packetSize);
             break;
         default:
             break;

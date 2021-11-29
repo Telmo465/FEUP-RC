@@ -8,13 +8,13 @@ int count = 0, flag = 1, IWellRecieved = 0;
 int numTramaEscrita = 0;
 struct termios oldtio,newtio;
 
-int dataPacketAfterReception(char* I, int length, char* dataPacket) {
+unsigned int dataPacketAfterReception(unsigned char* I, int length, unsigned char* dataPacket) {
 
   //É preciso fazer destuffing
 
   int lengthDP = 0;
 
-  for(int i=4; i<length-2; i++) {
+  for(unsigned int i=4; i<length-2; i++) {
     dataPacket[i-4] = I[i];
     lengthDP++;
   }
@@ -22,13 +22,13 @@ int dataPacketAfterReception(char* I, int length, char* dataPacket) {
   return lengthDP;
 }
 
-int verifyPacket(char* dataPacket, int length, char bcc2) {
+int verifyPacket(unsigned char* dataPacket, int length, unsigned char bcc2) {
 
   //É preciso verificar stuffing
 
-  char bcc2Aux = 0x00;
+  unsigned char bcc2Aux = 0x00;
 
-  for(int i=0; i<length; i++) {
+  for(unsigned int i=0; i<length; i++) {
     bcc2Aux ^= dataPacket[i];
 
   }
@@ -71,7 +71,7 @@ int readUA(int fd) {
 
 
 //State Machine para I 
-void stateMachineInfo(enum State* state, char byte, char* controlByte) {
+void stateMachineInfo(enum State* state, unsigned char byte, unsigned char* controlByte) {
 
   switch(*state){
     case START:
@@ -115,7 +115,7 @@ void stateMachineInfo(enum State* state, char byte, char* controlByte) {
 }
 
 //Para o SET and UA
-void stateMachineSETAndUA(enum State* state, char byte) {
+void stateMachineSETAndUA(enum State* state, unsigned char byte) {
 
   switch(*state){
      case START:
@@ -208,7 +208,7 @@ void responseStateMachine(enum State* state, unsigned char byte, unsigned char* 
   }
 }
 
-int initStruct(char* serial_port) {
+int initStruct(unsigned char* serial_port) {
 
   /*
     Open serial port device for reading and writing and not as controlling tty
@@ -231,8 +231,8 @@ int initStruct(char* serial_port) {
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 chars received */
+  newtio.c_cc[VTIME]    = 10;   /* inter-character timer unused */
+  newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -279,7 +279,7 @@ void reciveSETPacket(int fd) {
 
 int sendSETPacket(int fd) {
 
-  char SET[10], byte;
+  unsigned char SET[10], byte;
   enum State state = START;
  
   SET[0] = FLAG;
@@ -349,10 +349,10 @@ void buildRRFrame(unsigned char* RR, int numFrameRecieved) {
     RR[4] = FLAG;
 }
 
-int buildIFrame(char* I, char* buf, int length) {
+int buildIFrame(unsigned char* I, unsigned char* buf, int length) {
 
-  char packet[1024];
-  int i;
+  unsigned char packet[1024];
+  unsigned int i;
    
   I[0] = FLAG;
   I[1] = A_ER;
@@ -367,7 +367,7 @@ int buildIFrame(char* I, char* buf, int length) {
     numTramaEscrita = 0;   
   }
   
-  int j=0;
+  unsigned int j=0;
   for(i=4;i<length+4; i++) {
     I[i] = buf[i-4];
     packet[j] = buf[i-4];
@@ -377,21 +377,21 @@ int buildIFrame(char* I, char* buf, int length) {
   I[i] = BCC2(packet, j+1);
   I[i+1] = FLAG;
 
-  return i+3;
+  return i+2;
 }
 
-char BCC2(char* buf, int length) {
+unsigned char BCC2(unsigned char* buf, int length) {
     
-    char byte = 0x00;
+    unsigned char byte = 0x00;
 
-    for(int i=0; i<length-1; i++) {
+    for(unsigned int i=0; i<length-1; i++) {
       byte ^= buf[i];
     }
 
     return byte;
 }
 
-int llopen(int* fd, char* serial_port, int flag_name) {
+int llopen(int* fd, unsigned char* serial_port, int flag_name) {
 
   *fd = initStruct(serial_port);
 
@@ -412,22 +412,22 @@ int llopen(int* fd, char* serial_port, int flag_name) {
   return 0;
 }
 
-int llrwrite(int fd, char* buf, int length) {
+int llrwrite(int fd, unsigned char* buf, int length) {
     
   int res, recievedREJ;
-  char I[2058];
+  unsigned char I[2058];
   unsigned char byte;
   enum State state = START;
   
-  printf("Started Setup I!\n");
+  printf("\nStarted Setup I!\n");
 
   int ISize = buildIFrame(I, buf, length);
 
-  printf("Setup I done!");
-
-  count = 0;
+  printf("Setup I done!\n");
 
   initAlarme();
+
+  unsigned int countI = 0;
 
   do {
 
@@ -438,13 +438,13 @@ int llrwrite(int fd, char* buf, int length) {
         flag = 0;
     }
     
-    unsigned char controlByte; 
+    unsigned char controlByte;
+    printf("\n==Reading Frame R==\n");
     while(state != END && flag == 0) { //Recebe RR ou REJ
       read(fd, &byte, 1);
       responseStateMachine(&state, byte, &controlByte);
     }
-    
-    printf("cb: %X\n", controlByte);
+    printf("\n==Finish Frame RR==\n");
 
     if((controlByte == C_RR_0 || controlByte == C_RR_1) && flag == 0 && state == END) {
       printf("ACEITOU\n");
@@ -456,41 +456,42 @@ int llrwrite(int fd, char* buf, int length) {
       state = START;
     }
 
-    if(count > 2) {
+    countI++;
+
+    if(countI > 2) {
       break;
     }
-    
-    count++;
 
   } while(recievedREJ);
 }
 
 
-
-int llread(int fd, char* buf) {
+int llread(int fd, unsigned char* buf) {
   
-  int res, i = 0;
-  char byte, controlByte;
+  int res;
+  unsigned char byte, controlByte;
   unsigned char RR[255], REJ[255];
-  char I[2048];
+  unsigned char I[2048];
   enum State state = START;
 
-  char dataPacket[2048];
-  int lengthDataPacket = 0;
+  unsigned char dataPacket[2048];
+  unsigned int lengthDataPacket = 0;
 
   int reject = 1, countREJ = 0;
 
-  while(countREJ < 3) {
-
+  while(1) {
+    unsigned int i = 0;
+    printf("\n==Reading Frame I==\n");
     while(state != END) { //Recebe o pacote de Informacao
       read(fd, &byte, 1);
       stateMachineInfo(&state, byte, &controlByte);
       I[i] = byte;
       i++;
     }
+    printf("\n==Finished Reading Frame I==\n");
 
     lengthDataPacket = dataPacketAfterReception(I, i, dataPacket);
-    
+
     int numFrameI;
     //Se Trama I bem => RR; Se trama I mal => REJ
     if(verifyPacket(dataPacket, lengthDataPacket, I[i-2])) {
@@ -503,6 +504,7 @@ int llread(int fd, char* buf) {
       }  
       buildRRFrame(RR, numFrameI);
       write(fd, RR, 5);
+      return lengthDataPacket;
     }else {
       printf("REJ\n");
       state = START;
@@ -515,7 +517,12 @@ int llread(int fd, char* buf) {
       write(fd, REJ, 5);
       countREJ++;
     }
+
+    if(countREJ > 2) {
+      break;
+    }
   }
+
   return lengthDataPacket;
 }
 
