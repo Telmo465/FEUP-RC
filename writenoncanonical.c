@@ -15,29 +15,60 @@ int dataPacketAfterReception(char* I, int length, char* dataPacket) {
   int lengthDP = 0;
 
   for(int i=4; i<length-2; i++) {
-    dataPacket[i] = I[i-4];
+    dataPacket[i-4] = I[i];
     lengthDP++;
   }
 
   return lengthDP;
 }
 
-int verifyPacket(char* dataPacket, int length) {
+int verifyPacket(char* dataPacket, int length, char bcc2) {
 
   //É preciso verificar stuffing
 
-  char bcc2 = 0x00;
+  char bcc2Aux = 0x00;
 
-  for(int i=0; i<length-2; i++) {
-    bcc2 ^= dataPacket[i];
+  for(int i=0; i<length; i++) {
+    bcc2Aux ^= dataPacket[i];
+
   }
 
-  if(bcc2 != dataPacket[length-2]) {
+  if(bcc2Aux != bcc2) {
     return 0;
   }
 
   return 1;
 }
+
+
+int readUA(int fd) {
+    unsigned char received[255];
+    read(fd, received, 5);
+    printf("Received SET. Checking values...\n");
+
+    if (received[0] != FLAG || received[4] != FLAG){
+        printf("FLAG error\n");
+        return 1;
+    }
+    else if (received[1] != A_ER){
+        printf("A_UA error\n");
+        return 1;
+    }
+    else if (received[2] != C_UA){
+        printf("C_UA error\n");
+        return 1;
+    }
+    else if (received[3] != BCC1_UA){
+        printf("BCC_UA error\n");
+        return 1;
+    }
+    else{
+        printf("SET is valid\n");
+    }
+
+    return 0;
+}
+
 
 //State Machine para I 
 void stateMachineInfo(enum State* state, char byte, char* controlByte) {
@@ -118,13 +149,14 @@ void stateMachineSETAndUA(enum State* state, char byte) {
 }
 
 //Tanto para o RR como para o REJ
-void responseStateMachine(enum State* state, char byte, char* controlByte) {
+void responseStateMachine(enum State* state, unsigned char byte, unsigned char* controlByte) {
 
   switch(*state){
     case START:
       if(byte == FLAG) {
         *state = FLAG_RCV;
       }
+      break;
     case FLAG_RCV:
       if(byte == A_RE) {
         *state = A_RCV;
@@ -133,19 +165,22 @@ void responseStateMachine(enum State* state, char byte, char* controlByte) {
       }else {
         *state = START;
       }
+      break;
     case A_RCV:
       if(byte == C_RR_0 || byte == C_RR_1) {
+        *controlByte = byte; 
         *state = C_RCV_RR;
       }else if(byte == C_REJ_0 || byte == C_REJ_1) {
+        *controlByte = byte; 
         *state = C_RCV_REJ;
       }else if(byte == FLAG) {
         *state = FLAG_RCV;
       }else {
         *state = START;
       }
+      break;
     case C_RCV_RR:
       if(byte == BCC1_RR_0 || byte == BCC1_RR_1) {
-        *controlByte = byte; 
         *state = BCC_OK;
       }else if(byte == FLAG) {
         *state = FLAG_RCV;
@@ -164,11 +199,12 @@ void responseStateMachine(enum State* state, char byte, char* controlByte) {
       }
       break;
     case BCC_OK:
-      if(byte == FLAG) {
+      if(byte == FLAG) { 
         *state = END;
       }else {
         *state = START;
       }
+      break;
   }
 }
 
@@ -269,6 +305,7 @@ int sendSETPacket(int fd) {
     }
     
     if(state == END) {
+      count = 0;
       stopAlarm();
       return 0;
     }
@@ -280,7 +317,7 @@ int sendSETPacket(int fd) {
   return 1;
 }
 
-void buildREJFrame(char* REJ, int numFrameRecieved) {
+void buildREJFrame(unsigned char* REJ, int numFrameRecieved) {
     
     REJ[0] = FLAG;
     REJ[1] = A_RE;
@@ -296,17 +333,17 @@ void buildREJFrame(char* REJ, int numFrameRecieved) {
     REJ[4] = FLAG;
 }
 
-void buildRRFrame(char* RR, int numFrameRecieved) {
+void buildRRFrame(unsigned char* RR, int numFrameRecieved) {
 
     RR[0] = FLAG;
     RR[1] = A_RE;
     
     if(numFrameRecieved == 0) {
-        RR[2] = C_RR_1;
-        RR[3] = BCC1_RR_1;
+      RR[2] = C_RR_1;
+      RR[3] = BCC1_RR_1;
     }else {
-        RR[2] = C_RR_0;
-        RR[3] = BCC1_RR_0;
+      RR[2] = C_RR_0;
+      RR[3] = BCC1_RR_0;
     }
     
     RR[4] = FLAG;
@@ -378,19 +415,22 @@ int llopen(int* fd, char* serial_port, int flag_name) {
 int llrwrite(int fd, char* buf, int length) {
     
   int res, recievedREJ;
-  char I[2058], byte;
+  char I[2058];
+  unsigned char byte;
   enum State state = START;
   
   printf("Started Setup I!\n");
 
   int ISize = buildIFrame(I, buf, length);
-  
+
   printf("Setup I done!");
+
+  count = 0;
 
   initAlarme();
 
   do {
-    printf("##Escreve Informacao##\n");
+
     write(fd, I, ISize); //Envia o pacote de informacao
   
     if(flag) {
@@ -398,99 +438,92 @@ int llrwrite(int fd, char* buf, int length) {
         flag = 0;
     }
     
-    
-    char controlByte; 
-    printf("=============Recebe RR ou REJ=============\n");
-    int fr = 0;
+    unsigned char controlByte; 
     while(state != END && flag == 0) { //Recebe RR ou REJ
-      read(fd, byte, 1);
+      read(fd, &byte, 1);
       responseStateMachine(&state, byte, &controlByte);
-      if(byte != 0x00) {
-        if(fr == 16) {
-          printf("\n");
-          fr = 0;
-        }
-        byte = 0x00;
-        fr++;
-        printf("%X ", byte);//limpar se transmisao parar a meio
-      }
     }
-    printf("=============Recebe RR ou REJ=============\n");
     
-    /*
-    if((controlByte == C_RR_0 || controlByte == C_RR_1) && flag == 0) {
-      recievedREJ = 0;
+    printf("cb: %X\n", controlByte);
+
+    if((controlByte == C_RR_0 || controlByte == C_RR_1) && flag == 0 && state == END) {
+      printf("ACEITOU\n");
       stopAlarm();
       break;
     }else {
+      printf("REJEITOU\n");
       recievedREJ = 1;
       state = START;
     }
-    */
-  } while(state != END || !recievedREJ);
 
+    if(count > 2) {
+      break;
+    }
+    
+    count++;
+
+  } while(recievedREJ);
 }
+
+
 
 int llread(int fd, char* buf) {
   
   int res, i = 0;
   char byte, controlByte;
-  char RR[255], REJ[255], I[2048];
+  unsigned char RR[255], REJ[255];
+  char I[2048];
   enum State state = START;
 
-  //printf("========Recebe Informacao=========\n");
-  int fr = 0;
-  while(state != END) { //Recebe o pacote de Informacao
-    read(fd, &byte, 1);
-    stateMachineInfo(&state, byte, &controlByte);
-    if(byte != 0x00) {
-      if(fr == 16) {
-        //printf("\n");
-        fr = 0;
-      }
-      //printf("%X ", byte);
+  char dataPacket[2048];
+  int lengthDataPacket = 0;
+
+  int reject = 1, countREJ = 0;
+
+  while(countREJ < 3) {
+
+    while(state != END) { //Recebe o pacote de Informacao
+      read(fd, &byte, 1);
+      stateMachineInfo(&state, byte, &controlByte);
       I[i] = byte;
       i++;
-      fr++;
     }
-  }
-  //printf("\n");
-  //printf("========Recebe Informacao=========\n");  
-  
-  
-  char dataPacket[2048];
-  int lengthDataPacket = dataPacketAfterReception(I, i, dataPacket);
-  int numFrameI;
 
-  //Se Trama I bem => RR; Se trama I mal => REJ
-  if(verifyPacket(dataPacket, lengthDataPacket)) {
-    printf("RR\n");
-    if(controlByte == C_I0) {
-      numFrameI = 0;
+    lengthDataPacket = dataPacketAfterReception(I, i, dataPacket);
+    
+    int numFrameI;
+    //Se Trama I bem => RR; Se trama I mal => REJ
+    if(verifyPacket(dataPacket, lengthDataPacket, I[i-2])) {
+      printf("RR\n");
+      reject = 0;
+      if(controlByte == C_I0) {
+        numFrameI = 0;
+      }else {
+        numFrameI = 1;
+      }  
+      buildRRFrame(RR, numFrameI);
+      write(fd, RR, 5);
     }else {
-      numFrameI = 1;
+      printf("REJ\n");
+      state = START;
+      if(controlByte == C_I0) {
+        numFrameI = 0;
+      }else {
+        numFrameI = 1;
+      }
+      buildREJFrame(REJ, numFrameI);
+      write(fd, REJ, 5);
+      countREJ++;
     }
-    buildRRFrame(RR, numFrameI);
-    write(fd, RR, 5);
-  }else {
-    printf("REJ\n");
-    if(controlByte == C_I0) {
-      numFrameI = 0;
-    }else {
-      numFrameI = 1;
-    }
-    buildREJFrame(REJ, numFrameI);
-    write(fd, REJ, 5);
   }
-  
-  return i+1;
+  return lengthDataPacket;
 }
 
 int llclose(int fd, int flag_name) {
   unsigned char buf[255];
   
-  /*
-  switch(flag_name){
+/*
+switch(flag_name){
     case TRANSMITTER:
       
       buf[0] = FLAG;
@@ -502,17 +535,21 @@ int llclose(int fd, int flag_name) {
       do{
         //send DISC frame
         write(fd,buf,5)
-        //start alarm
+        printf("DISC sent.\n");
+        initAlarme(); //start alarm
+        flag = 0;
         //read DISC frame
+        printf("Waiting for DISC...\n")
         int error = readDISC(fd);
         
         if(!error){
-          //parar alarme
-          //flag alarme 0
+          stopAlarm(); //parar alarme
+          flag = 0; //flag alarme 0
           break;
         }
       } while(count <= 3 && flag);
-        //stop alarm
+        stopAlarm(); //stop alarm
+
       if (count > 3){
         printf("max tries achieved\n");
         return -1;
@@ -525,26 +562,30 @@ int llclose(int fd, int flag_name) {
       buf[4] = FLAG;
         
       write(fd, buf,5);
+      printf("UA Sent.\n"); 
       sleep(1);
 
       break;
 
     case RECEIVER:
         do{
-          //comecar alarme
-          //set flag alarme
-          int error = readDISC(fd);
+            if (count >= 1){
+                printf("Didn't receive...\n");
+            initAlarme();//comecar alarme
+            flag = 1;//set flag alarme
+
+            int error = readDISC(fd);
             if (!error){
-              //start alarme
-              //mudar a flag alarme  
+              stopAlarm();//start alarme
+              flag = 0;//mudar a flag alarme  
               break;
             }
         }while (count <= 3 && flag);
 
-        //stop alarme
+        stopAlarm();//stop alarme
         if (count > 3){
-        printf("max tries achieved\n");
-        return -1;
+            printf("max tries achieved\n");
+            return -1;
         }
 
         buf[0] = FLAG;
@@ -553,6 +594,10 @@ int llclose(int fd, int flag_name) {
         buf[3] = BCC_DISC;
         buf[4] = FLAG;  
         write(fd, buf, 5);
+        printf("DISC sent.\n"); 
+        
+        printf("Waiting for UA...\n");
+
         if (readUA(fd)){
           return 1;
         }
@@ -562,7 +607,7 @@ int llclose(int fd, int flag_name) {
       return -1;
   
   */
-  //sleep(1);
+  sleep(1);
    
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");

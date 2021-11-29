@@ -109,19 +109,17 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
     //Reader
     char buf[255];
     int packetSize = 0, aux;
-    int file_size = 1024 * 2;
+    int file_size = 4 * 2;
     
     switch (flag_name) {
         case TRANSMITTER:
             
             while(j < numPackets) {
-                for(int i=0; i<1024; i++) {
-                packet[i] = 0xFF;
+                for(int i=0; i<4; i++) {
+                    packet[i] = 0xFF;
                 }
                 printf("1.Vou escrever n: %d\n", j);
-                if(llrwrite(fd, packet, 1024)) {
-                    return 1;
-                }
+                llrwrite(fd, packet, 4);
                 j++;
             }
             /*
@@ -130,20 +128,20 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
                 return 1;
             }
             */
+           
             break;
         case RECEIVER:
-           
             while(packetSize < file_size) {
-                if(aux = llread(fd, buf)) {
-                    return 1;
-                }
+                aux = llread(fd, buf);
+                printf("aux: %d", aux);
+                packetSize += aux;
             }
-            packetSize += aux;
+            printf("aux: %d", packetSize);
             break;
         default:
             break;
     }
-    
+
     /*Packet so para testar*/
    
 
