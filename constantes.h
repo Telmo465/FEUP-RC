@@ -33,6 +33,6 @@
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define START 2
-#define END 3
+#define START_C 0x03
+#define END_C 0x02
 

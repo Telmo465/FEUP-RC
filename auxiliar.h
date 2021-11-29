@@ -2,6 +2,9 @@
 #define ALARME_H
 
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+
 
 extern int count, flag;
 
@@ -10,6 +13,7 @@ enum State {
 };
 
 void initAlarme();
+void stopAlarm();
 void alarme_handler(int signal);
 
 #endif

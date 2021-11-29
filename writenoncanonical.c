@@ -8,103 +8,39 @@ int count = 0, flag = 1, IWellRecieved = 0;
 int numTramaEscrita = 0;
 struct termios oldtio,newtio;
 
-int getNumberOfIframe(char* I) {
+int dataPacketAfterReception(char* I, int length, char* dataPacket) {
 
-  char byte;
-  int i = 0;
-  int num;
+  //É preciso fazer destuffing
 
-  while(byte != FLAG || i > 0) {
+  int lengthDP = 0;
 
-    byte = I[i];
-    if(byte == C_I0) {
-      num = 0
-    } else if(byte == C_I1) {
-      num = 1
-    }else {
-      num = -1;
-    }
-    i++;
-
+  for(int i=4; i<length-2; i++) {
+    dataPacket[i] = I[i-4];
+    lengthDP++;
   }
 
-  return num;
+  return lengthDP;
 }
 
-void checkIFrame(char* I) {
+int verifyPacket(char* dataPacket, int length) {
 
-  int i=0; 
-  char byte;
-  bool correct = false;
-  
-  byte = I[i];
+  //É preciso verificar stuffing
 
-  if(byte != FLAG) {
-    return false;
+  char bcc2 = 0x00;
+
+  for(int i=0; i<length-2; i++) {
+    bcc2 ^= dataPacket[i];
   }
 
-  i++;
-  
-  while(byte != FLAG) {
-    byte = I[i];
-    if(i == 1 && byte == A_ER) {
-      correct = true;
-    }else {
-      correct = false;
-    }
-    if(i == 2 && (byte == C_I0 || byte == C_I1) ) {
-      correct = true;
-    }else {
-      correct = false;
-    }
-    if(i == 3 && (byte == BCC1_I0 || byte == BCC1_I1)) {
-      correct = true;
-    }else {
-      correct = false;
-    }
-    if(i == 4 && ()) {
-
-    }else {
-
-    }
+  if(bcc2 != dataPacket[length-2]) {
+    return 0;
   }
-}
-  
 
-void stateMachineUA(enum State* state, char byte) {
-  
-  switch(*state){
-    case START:
-      if (byte == FLAG) *state = FLAG_RCV;
-      break;
-      
-    case FLAG_RCV:
-      if (byte == FLAG) *state = FLAG_RCV;
-      else if (byte == A_ER) *state = A_RCV;
-      else *state = START;
-      break;
-
-    case A_RCV:
-      if (byte == FLAG) *state = FLAG_RCV;
-      else if (byte == C_SET) *state = C_RCV;  
-      else *state = START;
-      break;
-      
-    case C_RCV:
-      if (byte == BCC1_SET) *state = BCC_OK;
-      else if (byte == FLAG) *state = FLAG_RCV;
-      else *state = START;
-      break;
-
-    case BCC_OK:
-      if (byte == FLAG) *state = END;
-      else *state = START;
-      break;
-
-  }
+  return 1;
 }
 
-void stateMachineSET(enum State* state, char byte) {
+//State Machine para I 
+void stateMachineInfo(enum State* state, char byte, char* controlByte) {
 
   switch(*state){
     case START:
@@ -118,13 +54,57 @@ void stateMachineSET(enum State* state, char byte) {
       break;
 
     case A_RCV:
-      if (byte == FLAG) *state = FLAG_RCV;
-      else if (byte == C_UA) *state = C_RCV;  // ver valor C
+      if (byte == FLAG) {
+        *state = FLAG_RCV;
+      }
+      else if (byte == C_I0 || byte == C_I1) {
+        *state = C_RCV;
+        *controlByte = byte;
+      }
       else *state = START;
       break;
       
     case C_RCV:
-      if (byte == BCC1_UA) *state = BCC_OK;
+      if (byte == BCC1_I1 || byte == BCC1_I0) *state = BCC_OK;
+      else if (byte == FLAG) *state = FLAG_RCV;
+      else *state = START;
+      break;
+
+    case BCC_OK:
+      if (byte != FLAG) *state = DATA_RCV;
+      else if (byte == FLAG) *state = FLAG_RCV;
+      else *state = START;
+      break;
+    
+    case DATA_RCV:
+      if (byte == FLAG) *state = END;
+      break;
+
+  }
+}
+
+//Para o SET and UA
+void stateMachineSETAndUA(enum State* state, char byte) {
+
+  switch(*state){
+     case START:
+      if (byte == FLAG) *state = FLAG_RCV;
+      break;
+      
+    case FLAG_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == A_ER) *state = A_RCV;
+      else *state = START;
+      break;
+
+    case A_RCV:
+      if (byte == FLAG) *state = FLAG_RCV;
+      else if (byte == C_UA || byte == C_SET) *state = C_RCV;
+      else *state = START;
+      break;
+      
+    case C_RCV:
+      if (byte == BCC1_UA || byte == BCC1_SET) *state = BCC_OK;
       else if (byte == FLAG) *state = FLAG_RCV;
       else *state = START;
       break;
@@ -133,107 +113,64 @@ void stateMachineSET(enum State* state, char byte) {
       if (byte == FLAG) *state = END;
       else *state = START;
       break;
-
+  
   }
 }
 
 //Tanto para o RR como para o REJ
-void responseStateMachine(enum State* state, char byte) {
+void responseStateMachine(enum State* state, char byte, char* controlByte) {
 
   switch(*state){
     case START:
       if(byte == FLAG) {
-        state = FLAG_RCV;
+        *state = FLAG_RCV;
       }
     case FLAG_RCV:
       if(byte == A_RE) {
-        state = A_RCV;
+        *state = A_RCV;
       }else if(byte == FLAG) {
-        state = FLAG_RCV;
+        *state = FLAG_RCV;
       }else {
-        state = START;
+        *state = START;
       }
     case A_RCV:
       if(byte == C_RR_0 || byte == C_RR_1) {
-          state = C_RCV_RR;
+        *state = C_RCV_RR;
       }else if(byte == C_REJ_0 || byte == C_REJ_1) {
-        state = C_RCV_REJ;
+        *state = C_RCV_REJ;
       }else if(byte == FLAG) {
-        state = FLAG_RCV;
+        *state = FLAG_RCV;
       }else {
-        state = START;
+        *state = START;
       }
     case C_RCV_RR:
       if(byte == BCC1_RR_0 || byte == BCC1_RR_1) {
-        state = BCC_OK;
+        *controlByte = byte; 
+        *state = BCC_OK;
       }else if(byte == FLAG) {
-        state = FLAG_RCV;
+        *state = FLAG_RCV;
       }else {
-        state = START;
+        *state = START;
       }
       break;
     case C_RCV_REJ:
       if(byte == BCC1_REJ_0 || byte == BCC1_REJ_1) {
-        state = BCC_OK;
+        *controlByte = byte;
+        *state = BCC_OK;
       }else if(byte == FLAG) {
-        state = FLAG_RCV;
+        *state = FLAG_RCV;
       }else {
-        state = START;
+        *state = START;
       }
       break;
     case BCC_OK:
       if(byte == FLAG) {
-        state = END;
+        *state = END;
       }else {
-        state = START;
+        *state = START;
       }
   }
 }
-
-void informatioStateMachine(enum State* state, char byte) {
-
-  char data_byte = 0x00;
-  int i = 0;
-
-  switch(*state) {
-    case START:
-      if(byte == FLAG) {
-        state = FLAG_RCV;
-      }
-    case FLAG_RCV:
-      if(byte == A_ER) {
-        state = A_RCV;
-      }else if(byte == FLAG) {
-        state = FLAG_RCV;
-      }else {
-        state = START;
-      }
-    case A_RCV:
-      if(byte == C_I0 || byte == C_I1) {
-          state = C_RCV;
-      }else if(byte == FLAG) {
-        state = FLAG_RCV;
-      }else {
-        state = START;
-      }
-    case C_RCV:
-      if(byte == FLAG) {
-        state = FLAG_RCV;
-      }else {
-        state = DATA_RCV;
-      }
-    case DATA_RCV:
-      if(byte == data_byte) {
-        state = FLAG_RCV2;
-      }else {
-        data_byte ^= byte;
-        i++;
-      }
-    case FLAG_RCV2:
-      state = END;
-  }
-}
-
 
 int initStruct(char* serial_port) {
 
@@ -299,7 +236,7 @@ void reciveSETPacket(int fd) {
 
   while(state != END) {
     read(fd, &byte, 1);
-    stateMachineUA(&state, byte);
+    stateMachineSETAndUA(&state, byte);
     i++;
   }
 }
@@ -328,10 +265,11 @@ int sendSETPacket(int fd) {
     
     while(state != END && flag == 0) {
       read(fd, &byte, 1);
-      stateMachineSET(&state, byte);
+      stateMachineSETAndUA(&state, byte);
     }
     
     if(state == END) {
+      stopAlarm();
       return 0;
     }
 
@@ -376,7 +314,7 @@ void buildRRFrame(char* RR, int numFrameRecieved) {
 
 int buildIFrame(char* I, char* buf, int length) {
 
-  char packet[255];
+  char packet[1024];
   int i;
    
   I[0] = FLAG;
@@ -402,8 +340,7 @@ int buildIFrame(char* I, char* buf, int length) {
   I[i] = BCC2(packet, j+1);
   I[i+1] = FLAG;
 
-  return i+1;
-
+  return i+3;
 }
 
 char BCC2(char* buf, int length) {
@@ -440,13 +377,18 @@ int llopen(int* fd, char* serial_port, int flag_name) {
 
 int llrwrite(int fd, char* buf, int length) {
     
-  int res;
+  int res, recievedREJ;
   char I[2058], byte;
   enum State state = START;
   
+  printf("Started Setup I!\n");
+
   int ISize = buildIFrame(I, buf, length);
   
-  
+  printf("Setup I done!");
+
+  initAlarme();
+
   do {
     printf("##Escreve Informacao##\n");
     write(fd, I, ISize); //Envia o pacote de informacao
@@ -456,64 +398,90 @@ int llrwrite(int fd, char* buf, int length) {
         flag = 0;
     }
     
-    printf("##Recebe RR ou REJ##");
     
-    char response[255];
-    int i = 0;   
+    char controlByte; 
+    printf("=============Recebe RR ou REJ=============\n");
+    int fr = 0;
     while(state != END && flag == 0) { //Recebe RR ou REJ
-        read(fd, byte, 1);
-        responseStateMachine(state, byte);
-        printf("B: %X", byte);//limpar se transmisao para a meio
-        respose[i] = byte;
+      read(fd, byte, 1);
+      responseStateMachine(&state, byte, &controlByte);
+      if(byte != 0x00) {
+        if(fr == 16) {
+          printf("\n");
+          fr = 0;
+        }
+        byte = 0x00;
+        fr++;
+        printf("%X ", byte);//limpar se transmisao parar a meio
+      }
     }
+    printf("=============Recebe RR ou REJ=============\n");
     
-    if(response[2] == C_RR_0 || response[2] == C_RR_1) {
-        break;
+    /*
+    if((controlByte == C_RR_0 || controlByte == C_RR_1) && flag == 0) {
+      recievedREJ = 0;
+      stopAlarm();
+      break;
+    }else {
+      recievedREJ = 1;
+      state = START;
     }
-    
-  }while(state != END);
-  printf("\n");
-     
+    */
+  } while(state != END || !recievedREJ);
+
 }
 
 int llread(int fd, char* buf) {
   
   int res, i = 0;
-  char byte;
-  char RR[255], REJ[255];
+  char byte, controlByte;
+  char RR[255], REJ[255], I[2048];
   enum State state = START;
 
-  printf("Recebe Informacao: \n");
+  //printf("========Recebe Informacao=========\n");
+  int fr = 0;
   while(state != END) { //Recebe o pacote de Informacao
-    read(fd, byte, 1);
-    informatioStateMachine(state, byte); //Corrigir state machine
-    I[i] = byte; //Se parar a meio limpar buffer
-    printf("B:%X", byte);
-    i++;
+    read(fd, &byte, 1);
+    stateMachineInfo(&state, byte, &controlByte);
+    if(byte != 0x00) {
+      if(fr == 16) {
+        //printf("\n");
+        fr = 0;
+      }
+      //printf("%X ", byte);
+      I[i] = byte;
+      i++;
+      fr++;
+    }
   }
-  printf("\n");    
+  //printf("\n");
+  //printf("========Recebe Informacao=========\n");  
   
-  char I[i];
   
-  //Fazer verificacao do trama I
-    
-  int numFrameI = getNumberOfIframe(I);//numero da frame I recebida
-  printf("Num Frame I: %d", numFrameI);  
-  
+  char dataPacket[2048];
+  int lengthDataPacket = dataPacketAfterReception(I, i, dataPacket);
+  int numFrameI;
+
   //Se Trama I bem => RR; Se trama I mal => REJ
-  printf("Escreve RR Frame");
-  buildRRFrame(RR, numFrameI);
-  write(fd, RR, 5); //Envia o pacote RR
-  
-  /*
-  if() {
+  if(verifyPacket(dataPacket, lengthDataPacket)) {
+    printf("RR\n");
+    if(controlByte == C_I0) {
+      numFrameI = 0;
+    }else {
+      numFrameI = 1;
+    }
     buildRRFrame(RR, numFrameI);
     write(fd, RR, 5);
   }else {
-    buildREJFrame(fd, REJ);
+    printf("REJ\n");
+    if(controlByte == C_I0) {
+      numFrameI = 0;
+    }else {
+      numFrameI = 1;
+    }
+    buildREJFrame(REJ, numFrameI);
     write(fd, REJ, 5);
   }
-  */
   
   return i+1;
 }
@@ -521,6 +489,7 @@ int llread(int fd, char* buf) {
 int llclose(int fd, int flag_name) {
   unsigned char buf[255];
   
+  /*
   switch(flag_name){
     case TRANSMITTER:
       
@@ -592,7 +561,7 @@ int llclose(int fd, int flag_name) {
     default:
       return -1;
   
-
+  */
   //sleep(1);
    
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {

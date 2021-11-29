@@ -15,19 +15,25 @@
 #include "constantes.h"
 #include "auxiliar.h"
 
-void stateMachineUA(enum State* state, char byte);
-void stateMachineSET(enum State* state, char byte);
+extern int fd_filesize, fd_file, fd_packetSize, packetsUnsent;
+
+int dataPacketAfterReception(char* I, int length, char* dataPacket);
+int verifyPacket(char* dataPacket, int length);
+void stateMachineInfo(enum State* state, char byte, char* controlByte);
+void responseStateMachine(enum State* state, char byte, char* controlByte);
+void stateMachineSETAndUA(enum State* state, char byte);
 int initStruct(char* serial_port);
 void sendUAPacket(int fd);
 void reciveSETPacket(int fd);
 int sendSETPacket(int fd);
-void buildREJFrame(char* REJ, int numT);
+void buildREJFrame(char* REJ, int numFrameRecieved);
 void buildRRFrame(char* RR, int numFrameRecieved);
-void buildIFrame(char* I, char* buf, int length);
-char BCC2(char* buf, int lenght);
+int buildIFrame(char* I, char* buf, int length);
+char BCC2(char* buf, int length);
 int llopen(int* fd, char* serial_port, int flag_name);
-int llrwrite(int fd, char* buf, int length, int flag_name);
+int llrwrite(int fd, char* buf, int length);
 int llread(int fd, char* buf);
-int llclose(int fd);
+int llclose(int fd, int flag_name);
+
 
 #endif
