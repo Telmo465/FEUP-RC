@@ -231,7 +231,7 @@ int initStruct(unsigned char* serial_port) {
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME]    = 10;   /* inter-character timer unused */
+  newtio.c_cc[VTIME]    = 0;   /* inter-character timer unused */
   newtio.c_cc[VMIN]     = 1;   /* blocking read until 5 chars received */
 
   /* 
@@ -264,17 +264,36 @@ void sendUAPacket(int fd) {
   write(fd, UA, 5);
 }
 
-void reciveSETPacket(int fd) {
+int reciveSETPacket(int fd) {
 
   enum State state = START;
   unsigned char byte;
   int i=0;
 
-  while(state != END) {
-    read(fd, &byte, 1);
-    stateMachineSETAndUA(&state, byte);
-    i++;
-  }
+  do {
+
+    if(flag){
+      alarm(3);
+      flag = 0;
+    }
+    
+    while(state != END && flag == 0) {
+      read(fd, &byte, 1);
+      stateMachineSETAndUA(&state, byte);
+      i++;
+    }
+
+    if(state == END) {
+      count = 0;
+      stopAlarm();
+      return 0;
+    }
+
+    count++;
+
+  }while(count < 3);
+
+  return 1;
 }
 
 int sendSETPacket(int fd) {
@@ -302,6 +321,7 @@ int sendSETPacket(int fd) {
     while(state != END && flag == 0) {
       read(fd, &byte, 1);
       stateMachineSETAndUA(&state, byte);
+     
     }
     
     if(state == END) {
@@ -364,17 +384,28 @@ int buildIFrame(unsigned char* I, unsigned char* buf, int length) {
   }else {
     I[2] = C_I1;
     I[3] = BCC1_I1;
-    numTramaEscrita = 0;   
+    numTramaEscrita = 0;    
   }
   
   unsigned int j=0;
   for(i=4;i<length+4; i++) {
-    I[i] = buf[i-4];
     packet[j] = buf[i-4];
+    if (packet[j] == FLAG || packet[x] == 0x7D) {
+      I[i] = 0x7D;
+      I[i+1] = packet[j] ^ 0x20;
+    }
     j++;
   }
   
-  I[i] = BCC2(packet, j+1);
+  unsigned char bcc2 = BCC2(packet, j+1);
+
+  if (bcc2 == FLAG || bcc2 == 0x7D){
+    I[i] = 0x7D;
+    I[i + 1] = bcc2 ^ 0x20;
+    i++;
+  }
+  else I[i] = bcc2;
+  
   I[i+1] = FLAG;
 
   return i+2;
@@ -402,7 +433,9 @@ int llopen(int* fd, unsigned char* serial_port, int flag_name) {
       }
       break;
     case RECEIVER:
-      reciveSETPacket(*fd);
+      if(reciveSETPacket(*fd)) {
+        return 1;
+      }
       sendUAPacket(*fd);
       break;
     default:
@@ -419,7 +452,7 @@ int llrwrite(int fd, unsigned char* buf, int length) {
   unsigned char byte;
   enum State state = START;
   
-  printf("\nStarted Setup I!\n");
+  printf("\nStarted Setup I!\n"); 
 
   int ISize = buildIFrame(I, buf, length);
 
@@ -432,7 +465,7 @@ int llrwrite(int fd, unsigned char* buf, int length) {
   do {
 
     write(fd, I, ISize); //Envia o pacote de informacao
-  
+
     if(flag) {
         alarm(3);
         flag = 0;
@@ -441,12 +474,18 @@ int llrwrite(int fd, unsigned char* buf, int length) {
     unsigned char controlByte;
     printf("\n==Reading Frame R==\n");
     while(state != END && flag == 0) { //Recebe RR ou REJ
+      printf("flag=>%d\n", flag);
       read(fd, &byte, 1);
       responseStateMachine(&state, byte, &controlByte);
     }
     printf("\n==Finish Frame RR==\n");
 
-    if((controlByte == C_RR_0 || controlByte == C_RR_1) && flag == 0 && state == END) {
+    if(flag == 1) {
+      countI++;
+      continue;
+    }
+
+    if((controlByte == C_RR_0 || controlByte == C_RR_1) && state == END) {
       printf("ACEITOU\n");
       stopAlarm();
       break;
@@ -454,15 +493,18 @@ int llrwrite(int fd, unsigned char* buf, int length) {
       printf("REJEITOU\n");
       recievedREJ = 1;
       state = START;
+      countI++;
     }
 
-    countI++;
+    printf("%d\n", countI);
 
     if(countI > 2) {
       break;
     }
 
   } while(recievedREJ);
+
+  return -1;
 }
 
 
@@ -479,16 +521,34 @@ int llread(int fd, unsigned char* buf) {
 
   int reject = 1, countREJ = 0;
 
+  initAlarme();
+
   while(1) {
     unsigned int i = 0;
+    
+    if(countREJ > 2) {
+      break;
+    }
+
+    if(flag) {
+      alarm(3);
+      flag = 0;
+    }
+
     printf("\n==Reading Frame I==\n");
-    while(state != END) { //Recebe o pacote de Informacao
+    while(state != END && flag == 0) { //Recebe o pacote de Informacao
+      printf("flag=>%d\n", flag);
       read(fd, &byte, 1);
       stateMachineInfo(&state, byte, &controlByte);
       I[i] = byte;
       i++;
     }
     printf("\n==Finished Reading Frame I==\n");
+
+    if(flag == 1) {
+      countREJ++;
+      continue;
+    }
 
     lengthDataPacket = dataPacketAfterReception(I, i, dataPacket);
 
@@ -516,10 +576,6 @@ int llread(int fd, unsigned char* buf) {
       buildREJFrame(REJ, numFrameI);
       write(fd, REJ, 5);
       countREJ++;
-    }
-
-    if(countREJ > 2) {
-      break;
     }
   }
 

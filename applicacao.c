@@ -33,7 +33,7 @@ void createDataPacket(unsigned char* packet, unsigned char* buffer, int size, in
     }
 }
 
-void createControlPacket(unsigned char* packet, char* fileName, int type) {
+int createControlPacket(unsigned char* packet, char* fileName, int type) {
 
     if(type = START) {
         packet[0] = START_C;
@@ -41,16 +41,22 @@ void createControlPacket(unsigned char* packet, char* fileName, int type) {
         packet[0] = END_C;
     }
     
-    packet[1] = 0x00; //T1
+    packet[1] = 0x00;
     packet[2] = sizeof(fd_filesize);
-    packet[3] = fd_filesize + '0'; // converts a integer into a char
-    
-    packet[4] = 0x01; //T2
-    packet[5] = sizeof(fileName);
-    
-    for(int i=0; i<strlen(fileName);i++) {
-        packet[i + 6] = fileName[i];
+    packet[3] = (fd_filesize >> 24) & 0xFF;
+    packet[4] = (fd_filesize >> 16) & 0xFF;
+    packet[5] = (fd_filesize >> 8) & 0xFF;
+    packet[6] = fd_filesize & 0xFF;
+
+    packet[7] = 0x01;
+    packet[8] = strlen(file_data.fileName);
+    for (int x = 0; x < strlen(file_data.fileName); x++){
+        packet[9+x] = file_data.fileName[x];
     }
+
+    int packetSize = strlen(file_data.fileName) + 9 * sizeof(unsigned char);
+
+    return packetSize;
 }
 
 
@@ -78,6 +84,29 @@ int sendDataPacket(int fd){
     }
 }
 
+int transmitter(int fd, char* filename) {
+
+    unsigned char controlPacket[1024];
+    int controlPacketSize;
+        
+   controlPacketSize = createControlPacket(controlPacket, filename, 0);
+
+    if(llrwrite(fd, controlPacket, controlPacketSize) == -1) {
+        return 1;
+    }
+
+    if(sendDataPacket(fd)) {
+        return 1;
+    }
+    
+    controlPacketSize = createControlPacket(controlPacket, filename, 1);
+
+    if(llrwrite(fd, controlPacket, controlPacketSize) == -1) {
+        return 1;
+    }
+
+}
+
 
 int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 -> TRANSMITTER 1 -> RECEIVER
 
@@ -98,12 +127,6 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
         return 1;
     }
 
-    //strcpy(file_name, argv[2]);
-    
-    //Writer
-    char packet[1024];
-    int numPackets = 2, j = 0;
-
     //Reader
     char buf[255];
     int packetSize = 0, aux;
@@ -111,21 +134,10 @@ int main (int argc, char** argv)  {//1 => serial_port; 2 => file_name; 3 => 0 ->
     
     switch (flag_name) {
         case TRANSMITTER:
-            while(j < numPackets) {
-                for(int i=0; i<4; i++) {
-                    packet[i] = 0xFF;
-                }
-                printf("1.Vou escrever n: %d\n", j);
-                llrwrite(fd, packet, 4);
-                j++;
-            }
-            /*
             readFileData(file_name);
-            if(sendDataPacket(fd)) {
+            if(transmitter(fd, file_name)) {
                 return 1;
             }
-            */
-           
             break;
         case RECEIVER:
             printf("\n...Receber Packet...\n");

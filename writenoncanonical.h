@@ -25,7 +25,7 @@ void responseStateMachine(enum State* state, unsigned char byte, unsigned char* 
 void stateMachineSETAndUA(enum State* state, unsigned char byte);
 int initStruct(unsigned char* serial_port);
 void sendUAPacket(int fd);
-void reciveSETPacket(int fd);
+int reciveSETPacket(int fd);
 int sendSETPacket(int fd);
 void buildREJFrame(unsigned char* REJ, int numFrameRecieved);
 void buildRRFrame(unsigned char* RR, int numFrameRecieved);
