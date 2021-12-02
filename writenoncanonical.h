@@ -19,7 +19,7 @@ extern int fd_filesize, fd_file, fd_packetSize, packetsUnsent;
 
 int readUA(int fd);
 unsigned int dataPacketAfterReception(unsigned char* I, int length, unsigned char* dataPacket);
-int verifyPacket(unsigned char* dataPacket, int length, unsigned char bcc2);
+int verifyPacket(unsigned char* dataPacket, int length);
 void stateMachineInfo(enum State* state, unsigned char byte, unsigned char* controlByte);
 void responseStateMachine(enum State* state, unsigned char byte, unsigned char* controlByte);
 void stateMachineSETAndUA(enum State* state, unsigned char byte);

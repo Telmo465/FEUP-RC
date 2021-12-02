@@ -28,11 +28,11 @@
 #define BCC1_RR_1 A_RE ^ C_RR_1
 #define BCC1_REJ_0 A_RE ^ C_REJ_0
 #define BCC1_REJ_1 A_RE ^ C_REJ_1
-#define BCC_DISC A_ER ^ C_SET
+#define BCC_DISC A_ER ^ C_DISC
 
 #define TRANSMITTER 0
 #define RECEIVER 1
 
-#define START_C 0x03
-#define END_C 0x02
+#define START_C 0x02
+#define END_C 0x03
 
